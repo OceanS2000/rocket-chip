@@ -153,24 +153,15 @@ object AddressDecoder
     // find the maximum bit in all input addresses
     val maxBits = log2Ceil(1 + ports.flatMap(_.map(_.base)).max)
 
-    var t = true
-    mask.zipWithIndex.map {
-      case (true, _) => {
-        t = false
-      }
-      case _ => {}
-    }
-    // if [mask] are all "false"
-    if (t) {
+    val anyNotMask = mask.fold(false)(_ || _)
+    if (!anyNotMask) {
       return ports.map(_ => true.B)
     }
-    val bitSetMap = ports.zipWithIndex.zip(mask).map {
-      case ((port, i), true) =>
-        BitSet(port.zipWithIndex.map {
-           p => (p._1.toBitPat(maxBits))
-        }:_*)
+
+    val bitSetMap = ports.zip(mask).map {
+      case (port, true) => BitSet(port.map{ r => r.toBitPat(maxBits) } : _*)
       case _ => BitSet.empty
     }
-    decoder.bitset(addr, bitSetMap, true).asBools.take(ports.length)
+    decoder.bitset(addr, bitSetMap).asBools.take(ports.length)
   }
 }
