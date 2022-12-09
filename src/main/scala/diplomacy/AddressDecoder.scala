@@ -2,7 +2,11 @@
 
 package freechips.rocketchip.diplomacy
 
-import Chisel.log2Ceil
+import chisel3._
+import chisel3.util.BitPat
+import chisel3.util.experimental.BitSet
+import chisel3.util.log2Ceil
+import chisel3.util.experimental.decode._
 
 object AddressDecoder
 {
@@ -130,5 +134,34 @@ object AddressDecoder
       if (debug) println("=> Selected bit 0x%x".format(bestBit))
       bestBit +: recurse(bestPartitions, bits.filter(_ != bestBit))
     }
+  }
+
+  // chisel Decoder: will use Espresso (by default) or QMCDecoder
+  def chiselDecoder(addr: UInt, ports: Ports, mask: Seq[Boolean]): Seq[Bool] = {
+    // if input is empty, no needs to pass to espresso decoder
+    if (ports.flatten.isEmpty) { 
+      return ports.map(_ => true.B) 
+    }
+    // Verify the user did not give us an impossible problem
+    ports.combinations(2).foreach { case Seq(x, y) =>
+      x.foreach { a =>
+        y.foreach { b =>
+          require(!a.overlaps(b), s"Ports cannot overlap: $a $b")
+        }
+      }
+    }
+    // find the maximum bit in all input addresses
+    val maxBits = log2Ceil(1 + ports.flatMap(_.map(_.base)).max)
+
+    val anyNotMask = mask.fold(false)(_ || _)
+    if (!anyNotMask) {
+      return ports.map(_ => true.B)
+    }
+
+    val bitSetMap = ports.zip(mask).map {
+      case (port, true) => BitSet(port.map{ r => r.toBitPat(maxBits) } : _*)
+      case _ => BitSet.empty
+    }
+    decoder.bitset(addr, bitSetMap).asBools.take(ports.length)
   }
 }

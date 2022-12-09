@@ -346,23 +346,9 @@ object TLXbar_ACancel
 
     // Based on input=>output connectivity, create per-input minimal address decode circuits
     val requiredAC = (connectAIO ++ connectCIO).distinct
-    val outputPortFns: Map[Vector[Boolean], Seq[UInt => Bool]] = requiredAC.map { connectO =>
+    val outputPortFns: Map[Vector[Boolean], UInt => Seq[Bool]] = requiredAC.map { connectO =>
       val port_addrs = edgesOut.map(_.manager.managers.flatMap(_.address))
-      val routingMask = AddressDecoder(filter(port_addrs, connectO))
-      val route_addrs = port_addrs.map(seq => AddressSet.unify(seq.map(_.widen(~routingMask)).distinct))
-
-      // Print the address mapping
-      if (false) {
-        println("Xbar mapping:")
-        route_addrs.foreach { p =>
-          print(" ")
-          p.foreach { a => print(s" ${a}") }
-          println("")
-        }
-        println("--")
-      }
-
-      (connectO, route_addrs.map(seq => (addr: UInt) => seq.map(_.contains(addr)).reduce(_ || _)))
+      (connectO, (addr: UInt) => AddressDecoder.chiselDecoder(addr, port_addrs, connectO))
     }.toMap
 
     // Print the ID mapping
@@ -378,8 +364,8 @@ object TLXbar_ACancel
     val addressC = (in zip edgesIn) map { case (i, e) => e.address(i.c.bits) }
 
     def unique(x: Vector[Boolean]): Bool = (x.filter(x=>x).size <= 1).B
-    val requestAIO = (connectAIO zip addressA) map { case (c, i) => outputPortFns(c).map { o => unique(c) || o(i) } }
-    val requestCIO = (connectCIO zip addressC) map { case (c, i) => outputPortFns(c).map { o => unique(c) || o(i) } }
+    val requestAIO = (connectAIO zip addressA) map { case (c, i) => outputPortFns(c)(i).map { o => unique(c) || o } }
+    val requestCIO = (connectCIO zip addressC) map { case (c, i) => outputPortFns(c)(i).map { o => unique(c) || o } }
     val requestBOI = out.map { o => inputIdRanges.map  { i => i.contains(o.b.bits.source) } }
     val requestDOI = out.map { o => inputIdRanges.map  { i => i.contains(o.d.bits.source) } }
     val requestEIO = in.map  { i => outputIdRanges.map { o => o.contains(i.e.bits.sink) } }
